@@ -6,8 +6,7 @@ import nestpy
 from scipy.interpolate import interp1d
 
 class Field(cylinterp.Geometry.UniformCylindricalGrid):
-    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring,
-                 file, sag, n_cath_wires, r_max_det):
+    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring, file):
 
         """
         Takes in the result of COMSOL according to a grid made by the
