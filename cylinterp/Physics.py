@@ -160,7 +160,7 @@ class RTPC(Field):
                                           rmin=sampleregion['rmin'],
                                           rmax=sampleregion['rmax'])
         points = r
-        points_cartesian = Tools.to_cartesian(points)
+        points_cartesian = cylinterp.Tools.to_cartesian(points)
 
         ids = np.arange(n_pts)
         remaining_ids = ids
@@ -195,10 +195,10 @@ class RTPC(Field):
                 v = self.vd(E_interp_norm)
                 dl = (v * dt * E_interp.T / E_interp_norm).T
 
-                points_cartesian = Tools.to_cartesian(points)
+                points_cartesian = cylinterp.Tools.to_cartesian(points)
                 #Step forward by dl
                 points_cartesian = points_cartesian + q * dl
-                points = Tools.to_polar(points_cartesian)
+                points = cylinterp.Tools.to_polar(points_cartesian)
 
                 # Flag for successful drift to the anode
                 hit_anode = points.T[1] <= driftregion['rmin']
@@ -248,9 +248,9 @@ class RTPC(Field):
                 v[v < 0] = 0
                 dl = (v * dt * E_interp.T / E_interp_norm).T
 
-                points_cartesian = Tools.to_cartesian(points)
+                points_cartesian = cylinterp.Tools.to_cartesian(points)
                 points_cartesian = points_cartesian + q * dl
-                points = Tools.to_polar(points_cartesian)
+                points = cylinterp.Tools.to_polar(points_cartesian)
 
 
                 # Flag for successful drift to the anode
