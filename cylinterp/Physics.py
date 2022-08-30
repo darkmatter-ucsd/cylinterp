@@ -11,7 +11,8 @@ class Field(cylinterp.Geometry.UniformCylindricalGrid):
         """
         Takes in the result of COMSOL according to a grid made by the
         UniformCylindricalGrid class and provides an interpolation function
-        using barycentric coordinates
+        using barycentric coordinates. The electric field MUST be exported in kV/cm,
+        and is converted to V/cm inside the class
 
         :param r0: Lower radius
         :param r1: Upper radius
@@ -21,9 +22,6 @@ class Field(cylinterp.Geometry.UniformCylindricalGrid):
         :param nz: Number of z slices
         :param n_first_ring: Number of sections of the first ring
         :param file: The COMSOL file for the field map
-        :param sag:
-        :param n_cath_wires:
-        :param r_max_det:
         """
 
         super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring)
