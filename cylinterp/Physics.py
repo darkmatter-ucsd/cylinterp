@@ -37,8 +37,8 @@ class Field(cylinterp.Geometry.UniformCylindricalGrid):
 
     def Interpolate(self, points):
         tetra_indices = self.TetraIndices(points)
-        cart_tetra = Tools.to_cartesian(self.polar_cs_grid[tetra_indices])
-        cart_points = Tools.to_cartesian(points)
+        cart_tetra = cylinterp.Tools.to_cartesian(self.polar_cs_grid[tetra_indices])
+        cart_points = cylinterp.Tools.to_cartesian(points)
 
         A = cart_tetra[:, 0, :]
         B = cart_tetra[:, 1, :]
@@ -49,9 +49,9 @@ class Field(cylinterp.Geometry.UniformCylindricalGrid):
         DA = D - A
         PA = cart_points - A
 
-        c1 = Tools.ScalarTripleProduct(PA, CA, DA) / Tools.ScalarTripleProduct(BA, CA, DA)
-        c2 = Tools.ScalarTripleProduct(PA, BA, DA) / Tools.ScalarTripleProduct(CA, BA, DA)
-        c3 = Tools.ScalarTripleProduct(PA, BA, CA) / Tools.ScalarTripleProduct(DA, BA, CA)
+        c1 = cylinterp.Tools.ScalarTripleProduct(PA, CA, DA) / cylinterp.Tools.ScalarTripleProduct(BA, CA, DA)
+        c2 = cylinterp.Tools.ScalarTripleProduct(PA, BA, DA) / cylinterp.Tools.ScalarTripleProduct(CA, BA, DA)
+        c3 = cylinterp.Tools.ScalarTripleProduct(PA, BA, CA) / cylinterp.Tools.ScalarTripleProduct(DA, BA, CA)
         c0 = 1 - c1 - c2 - c3
 
         c0 = c0.reshape(len(c0), 1)
