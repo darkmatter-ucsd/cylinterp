@@ -5,7 +5,56 @@ import itertools
 import nestpy
 from scipy.interpolate import interp1d
 
-class Field(cylinterp.Geometry.UniformCylindricalGrid):
+class Interpolator(cylinterp.Geometry.UniformCylindricalGrid):
+    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring):
+
+        """
+        Provides a template for the interpolator function
+
+        :param r0: Lower radius
+        :param r1: Upper radius
+        :param z0: Lower z
+        :param z1: Upper z
+        :param nr: Number of radii values
+        :param nz: Number of z slices
+        :param n_first_ring: Number of sections of the first ring
+        :param interp_values: The value to be interpolated
+        """
+
+        super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring)
+        self.interp_values = None
+    
+    def Interpolate(self, points):
+        tetra_indices = self.TetraIndices(points)
+        cart_tetra = cylinterp.Tools.to_cartesian(self.polar_cs_grid[tetra_indices])
+        cart_points = cylinterp.Tools.to_cartesian(points)
+
+        A = cart_tetra[:, 0, :]
+        B = cart_tetra[:, 1, :]
+        C = cart_tetra[:, 2, :]
+        D = cart_tetra[:, 3, :]
+        BA = B - A
+        CA = C - A
+        DA = D - A
+        PA = cart_points - A
+
+        c1 = cylinterp.Tools.ScalarTripleProduct(PA, CA, DA) / cylinterp.Tools.ScalarTripleProduct(BA, CA, DA)
+        c2 = cylinterp.Tools.ScalarTripleProduct(PA, BA, DA) / cylinterp.Tools.ScalarTripleProduct(CA, BA, DA)
+        c3 = cylinterp.Tools.ScalarTripleProduct(PA, BA, CA) / cylinterp.Tools.ScalarTripleProduct(DA, BA, CA)
+        c0 = 1 - c1 - c2 - c3
+
+        c0 = c0.reshape(len(c0), 1)
+        c1 = c1.reshape(len(c1), 1)
+        c2 = c2.reshape(len(c2), 1)
+        c3 = c3.reshape(len(c3), 1)
+
+        return (c0 * self.interp_values[tetra_indices[:, 0]] +
+                c1 * self.interp_values[tetra_indices[:, 1]] +
+                c2 * self.interp_values[tetra_indices[:, 2]] +
+                c3 * self.interp_values[tetra_indices[:, 3]])
+
+
+class Field(Interpolator):
     def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring, file):
 
         """
@@ -32,35 +81,30 @@ class Field(cylinterp.Geometry.UniformCylindricalGrid):
         self.Emap['Ey'] = 1e3 * self.Emap['Ey']
         self.Emap['Ez'] = 1e3 * self.Emap['Ez']
         self.Evec = self.Emap[['Ex', 'Ey', 'Ez']].values
+        self.interp_values = self.Evec
 
-    def Interpolate(self, points):
-        tetra_indices = self.TetraIndices(points)
-        cart_tetra = cylinterp.Tools.to_cartesian(self.polar_cs_grid[tetra_indices])
-        cart_points = cylinterp.Tools.to_cartesian(points)
 
-        A = cart_tetra[:, 0, :]
-        B = cart_tetra[:, 1, :]
-        C = cart_tetra[:, 2, :]
-        D = cart_tetra[:, 3, :]
-        BA = B - A
-        CA = C - A
-        DA = D - A
-        PA = cart_points - A
+class OpticalSimulation(Interpolator):
+    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring, n_initial_photons, file):
 
-        c1 = cylinterp.Tools.ScalarTripleProduct(PA, CA, DA) / cylinterp.Tools.ScalarTripleProduct(BA, CA, DA)
-        c2 = cylinterp.Tools.ScalarTripleProduct(PA, BA, DA) / cylinterp.Tools.ScalarTripleProduct(CA, BA, DA)
-        c3 = cylinterp.Tools.ScalarTripleProduct(PA, BA, CA) / cylinterp.Tools.ScalarTripleProduct(DA, BA, CA)
-        c0 = 1 - c1 - c2 - c3
+        """
+        Takes in the result of an optical simulation
 
-        c0 = c0.reshape(len(c0), 1)
-        c1 = c1.reshape(len(c1), 1)
-        c2 = c2.reshape(len(c2), 1)
-        c3 = c3.reshape(len(c3), 1)
+        :param r0: Lower radius
+        :param r1: Upper radius
+        :param z0: Lower z
+        :param z1: Upper z
+        :param nr: Number of radii values
+        :param nz: Number of z slices
+        :param n_first_ring: Number of sections of the first ring
+        :param file: The COMSOL file for the field map
+        """
 
-        return (c0 * self.Evec[tetra_indices[:, 0]] +
-                c1 * self.Evec[tetra_indices[:, 1]] +
-                c2 * self.Evec[tetra_indices[:, 2]] +
-                c3 * self.Evec[tetra_indices[:, 3]])
+        super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring)
+        self.n_initial_photons = n_initial_photons
+        self.hitpatterns = np.load(file)
+        self.interp_values = self.hitpatterns
+
 
 nc = nestpy.NESTcalc(nestpy.VDetector())
 @np.vectorize
@@ -280,3 +324,4 @@ class RTPC(Field):
                 end_time[ended_ids] += (i + 1) * dt
                 remaining_ids = remaining_ids[~ended]
             return end_time, status, r
+
