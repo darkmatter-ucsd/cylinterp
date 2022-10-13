@@ -196,7 +196,7 @@ class RTPC(Field):
         if sampleregion == None:
             sampleregion = driftregion
 
-        if r == None:
+        if type(r) != np.ndarray:
             r = self.generate_rand_points(n_pts, zmin=sampleregion['zmin'],
                                           zmax=sampleregion['zmax'],
                                           rmin=sampleregion['rmin'],
