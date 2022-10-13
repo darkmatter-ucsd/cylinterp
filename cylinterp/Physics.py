@@ -208,6 +208,7 @@ class RTPC(Field):
         remaining_ids = ids
         ended = np.repeat(False, n_pts)
         end_time = np.zeros(n_pts)
+        end_pos = np.zeros((n_pts, 3))
         status = np.zeros(n_pts)
 
         #Statuses: 0 = hit anode, 1 = hit cathode, 2 = hit a region of NaN field, 3 = out of drift region
@@ -267,8 +268,9 @@ class RTPC(Field):
                 ended = hit_anode | hit_cath | nan_field | oob
 
                 #Only keep the points which haven't ended their tracks
-                points = points[~ended]
                 ended_ids = remaining_ids[ended]
+                end_pos[ended_ids] = points[ended]
+                points = points[~ended]
                 end_time[ended_ids] += (i + 1) * dt
                 #The remaining indices that haven't ended
                 remaining_ids = remaining_ids[~ended]
@@ -277,7 +279,7 @@ class RTPC(Field):
                 r_tracks[i + 1][remaining_ids] = points.T[1]
                 theta_tracks[i + 1][remaining_ids] = points.T[2]
 
-            return end_time, status, z_tracks.T, r_tracks.T, theta_tracks.T, r
+            return end_time, status, z_tracks.T, r_tracks.T, theta_tracks.T, r, end_pos
 
         else:
             for i in range(recursion_limit):
@@ -319,9 +321,10 @@ class RTPC(Field):
 
                 ended = hit_anode | hit_cath | nan_field | oob
 
-                points = points[~ended]
                 ended_ids = remaining_ids[ended]
+                end_pos[ended_ids] = points[ended]
+                points = points[~ended]
                 end_time[ended_ids] += (i + 1) * dt
                 remaining_ids = remaining_ids[~ended]
-            return end_time, status, r
+            return end_time, status, r, end_pos
 
