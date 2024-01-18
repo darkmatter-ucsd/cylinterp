@@ -3,6 +3,7 @@
 
 #include "Tools.hh"
 #include <vector>
+#include <fstream>
 
 class UniformCylindricalGrid {
     public:
@@ -11,6 +12,9 @@ class UniformCylindricalGrid {
             int nr, int nz,
             int n_first_ring);
         ~UniformCylindricalGrid();
+
+        void TetraIndices(double points[], int tetra_indices[], int i);
+        void ExportClass();
 
     protected:
         //Setup methods

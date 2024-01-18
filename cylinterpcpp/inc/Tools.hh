@@ -8,7 +8,7 @@
 #include "pcg_random.hh"
 
 template<typename T>
-void PrintArr2d(T tArray[], int iNx, int iNy){
+static void PrintArr2d(T tArray[], int iNx, int iNy){
     std::cout << "[";
     for (int i = 0; i < iNy; i++){
         std::cout << "[";
@@ -24,7 +24,7 @@ void PrintArr2d(T tArray[], int iNx, int iNy){
     std::cout<<"]\n";
 }
 
-std::vector<double> Linspace(double a0, double a1, int n){
+static std::vector<double> Linspace(double a0, double a1, int n){
     std::vector<double> a_out;
     for (int i=0; i<n; i++){
         a_out.emplace_back(a0 + i*(a1-a0)/(n-1));
@@ -33,7 +33,7 @@ std::vector<double> Linspace(double a0, double a1, int n){
     return a_out;
 }
 
-void ToCartesian(double polar_points[],
+static void ToCartesian(double polar_points[],
     double cartesian_points[], int i){
     
     //polar_points: 1-d array of polar points which is actually hidden as a 2-d array of 3-d points.
@@ -47,7 +47,7 @@ void ToCartesian(double polar_points[],
     cartesian_points[3*i+2] = polar_points[3*i];
 }
 
-void ToPolar(double polar_points[],
+static void ToPolar(double polar_points[],
     double cartesian_points[], int i){
     
     //polar_points: 1-d array of polar points which is actually hidden as a 2-d array of 3-d points.
@@ -64,7 +64,7 @@ void ToPolar(double polar_points[],
     polar_points[3*i+2] = angle;
 }
 
-void CrossProduct(double a[], double b[], double a_cross_b[],
+static void CrossProduct(double a[], double b[], double a_cross_b[],
     int i_in, int i_out){
     // a: an array with at least 3 elements
     // b: ''
@@ -77,7 +77,7 @@ void CrossProduct(double a[], double b[], double a_cross_b[],
     a_cross_b[3*i_out+2] = a[3*i_in]*b[3*i_in+1]-a[3*i_in+1]*b[3*i_in];
 }
 
-double ScalarTripleProduct(double a[], double b[], double c[], int i){
+static double ScalarTripleProduct(double a[], double b[], double c[], int i){
     double axb[3];
 
     CrossProduct(a, b, axb, i, 0);
@@ -87,7 +87,7 @@ double ScalarTripleProduct(double a[], double b[], double c[], int i){
     return abc;
 }
 
-void GenerateRandPointsPipe(int n_points,
+static void GenerateRandPointsPipe(int n_points,
     double r_min, double r_max,
     double z_min, double z_max,
     double points[], pcg32& rng){

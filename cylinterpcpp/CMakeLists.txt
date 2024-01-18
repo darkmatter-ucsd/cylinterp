@@ -6,5 +6,5 @@ SET(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} "/home/daqtest/Processor/boost_1_81
 
 file(GLOB sources ${PROJECT_SOURCE_DIR}/src/*.cc)
 
-add_executable(test test.cc)
+add_executable(test test.cc ${sources})
 target_include_directories(test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/inc)
