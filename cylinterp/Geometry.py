@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import itertools
 
+
 class UniformCylindricalGrid():
     """
     Defines a cylindrical grid with roughly equal volumes. This is a controlled
