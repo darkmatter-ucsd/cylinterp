@@ -83,7 +83,7 @@ void UniformCylindricalGrid::SetGrid(){
     }
 }
 
-void UniformCylindricalGrid::TetraIndices(double points[], int tetra_indices[], int i){
+void UniformCylindricalGrid::TetraIndices(double points[], int tetra_indices[], int i, int i_out){
     /*
     :param points: a 1-d array with length 3 x n_points arranged like
         [z0, r0, phi0, ..., zN-1, rN-1, phiN-1]
@@ -115,8 +115,8 @@ void UniformCylindricalGrid::TetraIndices(double points[], int tetra_indices[], 
     if (!(!((theta_ind_nearest > theta_ind_bin_0)&&(!theta_inb)))) theta_ind_nearest = 0;
 
     // Two points closest to the closest ring
-    tetra_indices[4*i] = z_ind_nearest * m_dr_coords.size() + r_nearest_offset + theta_ind_bin_0;
-    tetra_indices[4*i+1] = z_ind_nearest * m_dr_coords.size() + r_nearest_offset + theta_ind_bin_1;
+    tetra_indices[4*i_out] = z_ind_nearest * m_dr_coords.size() + r_nearest_offset + theta_ind_bin_0;
+    tetra_indices[4*i_out+1] = z_ind_nearest * m_dr_coords.size() + r_nearest_offset + theta_ind_bin_1;
 
     // Now we will choose to step either backwards or forwards in r
     int r_step = 1 - 2 * (r_ind_nearest - r_ind_bin);
@@ -128,11 +128,11 @@ void UniformCylindricalGrid::TetraIndices(double points[], int tetra_indices[], 
     if (!((points[3*i+2] + m_dd_theta_in_r_slice[r_ind_stepped])< (2*M_PI)))
         theta_ind_nearest_rstep = 0;
 
-    tetra_indices[4*i+2] = z_ind_nearest * m_dr_coords.size() + r_step_offset + theta_ind_nearest_rstep;
+    tetra_indices[4*i_out+2] = z_ind_nearest * m_dr_coords.size() + r_step_offset + theta_ind_nearest_rstep;
 
     // Lastly we need to choose a step in z
     int z_step = 1 - 2*(z_ind_nearest - z_ind_bin);
-    tetra_indices[4*i+3] = (z_ind_nearest + z_step) * m_dr_coords.size() + r_nearest_offset + theta_ind_nearest;
+    tetra_indices[4*i_out+3] = (z_ind_nearest + z_step) * m_dr_coords.size() + r_nearest_offset + theta_ind_nearest;
 }
 
 void UniformCylindricalGrid::ExportClass(){

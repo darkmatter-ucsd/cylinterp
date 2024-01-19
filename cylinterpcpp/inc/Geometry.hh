@@ -13,7 +13,7 @@ class UniformCylindricalGrid {
             int n_first_ring);
         ~UniformCylindricalGrid();
 
-        void TetraIndices(double points[], int tetra_indices[], int i);
+        void TetraIndices(double points[], int tetra_indices[], int i, int i_out);
         void ExportClass();
 
     protected:

@@ -3,9 +3,12 @@
 #include <string>
 #include <random>
 #include <cmath>
+#include <fstream>
+
 #include "pcg_random.hh"
-// #include "Tools.hh"
+#include "Tools.hh"
 #include "Geometry.hh"
+#include "Interpolator.hh"
 
 int main()
 {
@@ -125,11 +128,42 @@ int main()
     
     int tetra_indices[4*n_points];
     for (int i=0; i<n_points; i++){
-        unicylgrid->TetraIndices(fixed_rand_points, tetra_indices, i);
+        unicylgrid->TetraIndices(fixed_rand_points, tetra_indices, i, i);
         // std::cout << "Worked for index "<<i<<"\n";
     }
 
+    std::cout << "Tetrahedral indices for the points: \n";
     PrintArr2d(tetra_indices, 4, n_points);
+    
+    //Get the field data
+    const char* field_file = "blah.bin";
+    std::ifstream input_field_file(field_file, std::ios::binary);
 
+    // Get the size of the file
+    input_field_file.seekg(0, std::ios::end);
+    std::streampos fileSize = input_field_file.tellg();
+    input_field_file.seekg(0, std::ios::beg);
+
+    // Calculate the number of doubles in the file
+    size_t numDoubles = fileSize / sizeof(double);
+
+    // Allocate memory for the doubles on the heap
+    double* field = new double[numDoubles];
+
+    // Read the doubles from the file into the allocated memory
+    input_field_file.read(reinterpret_cast<char*>(field), fileSize);
+    input_field_file.close();
+
+    Interpolator *interpol = new Interpolator(5E-4, 4., -1., 11., 60, 100, 8, field, 3);
+
+    double interp_field[3*n_points];
+    for (int i=0; i<n_points; i++){
+        interpol->Interpolate(fixed_rand_points, interp_field, i, i);
+    }
+
+    std::cout << "\nInterpolated fields: \n";
+    PrintArr2d(interp_field, 3, n_points);
+
+    delete interpol; //Deleting the interpolator automatically deletes the field
     delete unicylgrid;
 }

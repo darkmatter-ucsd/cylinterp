@@ -34,7 +34,7 @@ static std::vector<double> Linspace(double a0, double a1, int n){
 }
 
 static void ToCartesian(double polar_points[],
-    double cartesian_points[], int i){
+    double cartesian_points[], int i, int i_out){
     
     //polar_points: 1-d array of polar points which is actually hidden as a 2-d array of 3-d points.
     //  This "3" is hard coded, you're not doing anything in anything other than 3 dimensions anyway
@@ -42,13 +42,13 @@ static void ToCartesian(double polar_points[],
     //i: The point being looked at
 
     //0th index of cartesian is x, 1st index of polar is r
-    cartesian_points[3*i] = polar_points[3*i+1] * std::cos(polar_points[3*i+2]);
-    cartesian_points[3*i+1] = polar_points[3*i+1] * std::sin(polar_points[3*i+2]);
-    cartesian_points[3*i+2] = polar_points[3*i];
+    cartesian_points[3*i_out] = polar_points[3*i+1] * std::cos(polar_points[3*i+2]);
+    cartesian_points[3*i_out+1] = polar_points[3*i+1] * std::sin(polar_points[3*i+2]);
+    cartesian_points[3*i_out+2] = polar_points[3*i];
 }
 
 static void ToPolar(double polar_points[],
-    double cartesian_points[], int i){
+    double cartesian_points[], int i, int i_out){
     
     //polar_points: 1-d array of polar points which is actually hidden as a 2-d array of 3-d points.
     //  This "3" is hard coded, you're not doing anything in anything other than 3 dimensions anyway
@@ -58,10 +58,10 @@ static void ToPolar(double polar_points[],
     double angle = std::atan2(cartesian_points[3*i+1], cartesian_points[3*i]);
     if (angle < 0) angle += 2*M_PI;
 
-    polar_points[3*i] = cartesian_points[3*i+2];
-    polar_points[3*i+1] = std::sqrt(cartesian_points[3*i]*cartesian_points[3*i]+
+    polar_points[3*i_out] = cartesian_points[3*i+2];
+    polar_points[3*i_out+1] = std::sqrt(cartesian_points[3*i]*cartesian_points[3*i]+
         cartesian_points[3*i+1]*cartesian_points[3*i+1]);
-    polar_points[3*i+2] = angle;
+    polar_points[3*i_out+2] = angle;
 }
 
 static void CrossProduct(double a[], double b[], double a_cross_b[],
