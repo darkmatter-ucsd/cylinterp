@@ -63,6 +63,8 @@ class RTPC {
 
         bool m_bregular_vd_grid = false;
         double m_ddE;
+
+        int m_inum_threads = 4;
 };
 
 #endif

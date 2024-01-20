@@ -83,7 +83,9 @@ void RTPC::Drift(double r[], int n_pts,
     //Load electric field buffer
     double *E_interp = new double[3*n_pts];
 
-    for (int p=0; p<n_pts; p++){
+    int p;
+    #pragma omp parallel for private(p) shared(r, end_time, end_pos, status, tracks, cart_r, E_interp) num_threads(6) collapse(1)
+    for (p=0; p<n_pts; p++){
         for (int c=0; c<m_irecursion_limit; c++){
             if (tracking){
                 for (int t_d=0; t_d<3; t_d++) {
