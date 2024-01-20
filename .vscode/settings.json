@@ -38,6 +38,9 @@
         "memory_resource": "cpp",
         "random": "cpp",
         "string": "cpp",
-        "bit": "cpp"
+        "bit": "cpp",
+        "fstream": "cpp",
+        "deque": "cpp",
+        "optional": "cpp"
     }
 }

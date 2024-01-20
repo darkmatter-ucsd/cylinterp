@@ -1,2 +1,5 @@
 test_data/*
 cylinterpcpp/build
+cylinterp/__pycache__
+cylinterp/.ipynb_checkpoints
+.vscode

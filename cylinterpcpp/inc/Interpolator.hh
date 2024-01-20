@@ -19,9 +19,11 @@ class Interpolator : public UniformCylindricalGrid{
         
         ~Interpolator();
 
-        void Interpolate(double points[], double interp_values[], int i, int i_out);
+        void Interpolate(double points[],
+            double cart_points[],
+            double interp_values[], int i, int i_out);
     
-    protected:
+    // protected:
         double *m_dpmap_values;
         int m_imap_dim;
 };

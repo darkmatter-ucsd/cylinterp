@@ -33,12 +33,12 @@ UniformCylindricalGrid::~UniformCylindricalGrid(){
 void UniformCylindricalGrid::MakePolarCoords(){
     m_dr_grid = Linspace(m_dr0, m_dr1, m_inr);
 
-    double da = M_PI*(std::pow(m_dr_grid[1], 2) - std::pow(m_dr_grid[0], 2))/m_in_first_ring;
+    double da = M_PI*(m_dr_grid[1]*m_dr_grid[1] - m_dr_grid[0]*m_dr_grid[0])/m_in_first_ring;
     m_in_theta_in_r_slice.emplace_back(0);
     for (int i=0; i<m_inr-1; i++){
         //Loop over each ring (i.e. step in dr)
         double r_center = (m_dr_grid[i+1]+m_dr_grid[i])/2;
-        double area_ring = M_PI * (std::pow(m_dr_grid[i+1],2)-std::pow(m_dr_grid[i],2));
+        double area_ring = M_PI * (m_dr_grid[i+1]*m_dr_grid[i+1]-m_dr_grid[i]*m_dr_grid[i]);
 
         //The number of angular segments is approximately the area of the ring divided by the initial da
         int n_theta = std::round(area_ring/da);

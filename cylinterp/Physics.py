@@ -30,10 +30,11 @@ class Interpolator(cylinterp.Geometry.UniformCylindricalGrid):
         super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring)
         self.interp_values = None
     
-    def Interpolate(self, points):
+    def Interpolate(self, points, cart_points = None):
         tetra_indices = self.TetraIndices(points)
-        cart_tetra = cylinterp.Tools.to_cartesian(self.polar_cs_grid[tetra_indices])
-        cart_points = cylinterp.Tools.to_cartesian(points)
+        cart_tetra = self.cart_cs_grid[tetra_indices]
+        if type(cart_points)!=np.ndarray:
+            cart_points = cylinterp.Tools.to_cartesian(points)
 
         A = cart_tetra[:, 0, :]
         B = cart_tetra[:, 1, :]
@@ -44,9 +45,10 @@ class Interpolator(cylinterp.Geometry.UniformCylindricalGrid):
         DA = D - A
         PA = cart_points - A
 
-        c1 = cylinterp.Tools.ScalarTripleProduct(PA, CA, DA) / cylinterp.Tools.ScalarTripleProduct(BA, CA, DA)
-        c2 = cylinterp.Tools.ScalarTripleProduct(PA, BA, DA) / cylinterp.Tools.ScalarTripleProduct(CA, BA, DA)
-        c3 = cylinterp.Tools.ScalarTripleProduct(PA, BA, CA) / cylinterp.Tools.ScalarTripleProduct(DA, BA, CA)
+        stp = cylinterp.Tools.ScalarTripleProduct(BA, CA, DA)
+        c1 = cylinterp.Tools.ScalarTripleProduct(PA, CA, DA) / stp
+        c2 = -cylinterp.Tools.ScalarTripleProduct(PA, BA, DA) / stp
+        c3 = cylinterp.Tools.ScalarTripleProduct(PA, BA, CA) / stp
         c0 = 1 - c1 - c2 - c3
 
         c0 = c0.reshape(len(c0), 1)
@@ -168,6 +170,24 @@ class RTPC(Field):
                               ((zmid - self.z_coords[-1]) * (zmid - self.z_coords[0])))
         return np.array([r * np.cos(self.cath_angles), r * np.sin(self.cath_angles)]).T
 
+    def nearest_cathode_pos(self, z, theta):
+        """
+        Assuming the sagging cathodes are parabolic, find the distance from the center of the detector
+        to the cathode.
+
+        :param z: A 1-d array of z-values
+        :return: A 2-d array of [x,y] values for where the cathodes are located at each particular z
+        """
+        zmid = (self.z_coords[0] + self.z_coords[-1]) / 2
+        r = self.r_max_det - (self.sag * (z - self.z_coords[-1]) * (z - self.z_coords[0]) /
+                            ((zmid - self.z_coords[-1]) * (zmid - self.z_coords[0])))
+        
+        dth = 2*np.pi/self.n_cath_wires
+        th_ind = np.round(theta/dth).astype('int')
+        th_ind[(theta>2*np.pi - dth/2)|(np.isnan(theta))] = 0
+        th_wires = self.cath_angles.flatten()[th_ind]
+        return np.array([r*np.cos(th_wires), r*np.sin(th_wires)]).T
+
     def Drift(self,
               r=None,
               n_pts=100,
@@ -237,7 +257,7 @@ class RTPC(Field):
                     break
                 
                 #points is in cylindrical at this point
-                E_interp = self.Interpolate(points)
+                E_interp = self.Interpolate(points, cart_points = points_cartesian)
 
                 #The magnitude of the electric field at each point
                 E_interp_norm = np.linalg.norm(E_interp, axis=1)
@@ -266,7 +286,7 @@ class RTPC(Field):
                     dl = long_step*dl/dl_norm.reshape(len(dl), 1)+trans_step_1*v_trans_1+trans_step_2*v_trans_2
                 
 
-                points_cartesian = cylinterp.Tools.to_cartesian(points)
+                # points_cartesian = cylinterp.Tools.to_cartesian(points)
                 #Step forward by dl
                 points_cartesian = points_cartesian + q * dl
                 points = cylinterp.Tools.to_polar(points_cartesian)
@@ -275,10 +295,13 @@ class RTPC(Field):
                 hit_anode = points.T[1] <= driftregion['rmin']
 
                 # Flag for hitting the cathode
-                cath_pos = self.cathode_position(points.T[0])
-                reshapen_cart = np.tile(points_cartesian[:, :2], self.n_cath_wires).reshape(cath_pos.shape)
-                dist_to_cath = np.linalg.norm(reshapen_cart - cath_pos, axis=2)
-                hit_cath = np.any(dist_to_cath < cath_thresh, axis=1)
+                # cath_pos = self.cathode_position(points.T[0])
+                # reshapen_cart = np.tile(points_cartesian[:, :2], self.n_cath_wires).reshape(cath_pos.shape)
+                # dist_to_cath = np.linalg.norm(reshapen_cart - cath_pos, axis=2)
+                cath_pos = self.nearest_cathode_pos(points.T[0], points.T[2])
+                dist_to_cath = np.linalg.norm(cath_pos-points_cartesian[:,:2], axis = 1)
+                # hit_cath = np.any(dist_to_cath < cath_thresh, axis=1)
+                hit_cath = dist_to_cath<cath_thresh
 
                 # Flag for hitting a region of NaN
                 nan_field = np.isnan(E_interp_norm)
@@ -299,6 +322,7 @@ class RTPC(Field):
                 ended_ids = remaining_ids[ended]
                 end_pos[ended_ids] = points[ended]
                 points = points[~ended]
+                points_cartesian = points_cartesian[~ended]
                 end_time[ended_ids] += (i + 1) * dt
                 #The remaining indices that haven't ended
                 remaining_ids = remaining_ids[~ended]

@@ -16,7 +16,7 @@ class UniformCylindricalGrid {
         void TetraIndices(double points[], int tetra_indices[], int i, int i_out);
         void ExportClass();
 
-    protected:
+    // protected:
         //Setup methods
         void MakePolarCoords();
         void SetGrid();

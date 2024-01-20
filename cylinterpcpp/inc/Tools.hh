@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <cmath>
+#include <fstream>
+#include <string>
 #include <random>
 #include <vector>
 #include "pcg_random.hh"
@@ -22,6 +24,34 @@ static void PrintArr2d(T tArray[], int iNx, int iNy){
             std::cout<<",\n";
     }
     std::cout<<"]\n";
+}
+
+static size_t FileSize(std::string& filename){
+    std::ifstream input_data(filename.c_str(), std::ios::binary);
+    input_data.seekg(0, std::ios_base::end);
+    size_t size = input_data.tellg();
+    return size;
+}
+
+template<typename T>
+static void LoadArrayFile(std::string& filename, T arr[], size_t size){
+    std::ifstream input_data(filename.c_str(), std::ios::binary);
+    input_data.seekg(0, std::ios_base::beg);
+
+    input_data.read(reinterpret_cast<char*>(arr), size);
+    input_data.close();
+}
+
+template<typename T>
+static void LoadArrayFile(std::string& filename, std::vector<T> &arr){
+    std::ifstream input_data(filename.c_str());
+    input_data.seekg(0, std::ios_base::end);
+    std::size_t size = input_data.tellg();
+    input_data.seekg(0, std::ios_base::beg);
+
+    arr.resize(size / sizeof(T), 0);
+    input_data.read((char*)(&arr[0]), size);
+    input_data.close();
 }
 
 static std::vector<double> Linspace(double a0, double a1, int n){
@@ -93,7 +123,7 @@ static void GenerateRandPointsPipe(int n_points,
     double points[], pcg32& rng){
     
     std::uniform_real_distribution<double> uni_dist_z(z_min, z_max);
-    std::uniform_real_distribution<double> uni_dist_r(std::pow(r_min, 2.), std::pow(r_max, 2.));
+    std::uniform_real_distribution<double> uni_dist_r(r_min*r_min, r_max*r_max);
     std::uniform_real_distribution<double> uni_dist_theta(0., 2* M_PI);
 
     for (int i=0; i < n_points; i++){

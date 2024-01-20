@@ -4,14 +4,14 @@ Interpolator::~Interpolator(){
     delete[] m_dpmap_values;
 }
 
-void Interpolator::Interpolate(double points[], double interp_values[], int i, int i_out){
+void Interpolator::Interpolate(double points[], double cart_points[], double interp_values[], int i, int i_out){
     // Find the tetrahedral indices
     int tetra_indices[4];
     TetraIndices(points, tetra_indices, i, 0);
     
     // Cartesian coordinate of the point of interest
-    double cart_points[3];
-    ToCartesian(points, cart_points, i, 0);
+    // double cart_points[3];
+    ToCartesian(points, cart_points, i, i);
 
     // Find the cartesian coordinates of those tetrahedral indices
     double cart_tetra_points[12];
@@ -29,15 +29,16 @@ void Interpolator::Interpolate(double points[], double interp_values[], int i, i
     }
 
     // Subtract off the first corner of the tetrahedron from the point in question
+    double cart_points_shifted[3];
     for (int m=0; m<3; m++)
-        cart_points[m] -= cart_tetra_points[m];
+        cart_points_shifted[m] = cart_points[3*i+m] - cart_tetra_points[m];
 
     // Barycentric coefficients
     double tetra_stp = ScalarTripleProduct(&cart_tetra_points[3], &cart_tetra_points[6], &cart_tetra_points[9], 0);
     double bary_c[4];
-    bary_c[1] = ScalarTripleProduct(&cart_points[0], &cart_tetra_points[6], &cart_tetra_points[9], 0)/tetra_stp;
-    bary_c[2] = -ScalarTripleProduct(&cart_points[0], &cart_tetra_points[3], &cart_tetra_points[9], 0)/tetra_stp;
-    bary_c[3] = ScalarTripleProduct(&cart_points[0], &cart_tetra_points[3], &cart_tetra_points[6], 0)/tetra_stp;
+    bary_c[1] = ScalarTripleProduct(&cart_points_shifted[0], &cart_tetra_points[6], &cart_tetra_points[9], 0)/tetra_stp;
+    bary_c[2] = -ScalarTripleProduct(&cart_points_shifted[0], &cart_tetra_points[3], &cart_tetra_points[9], 0)/tetra_stp;
+    bary_c[3] = ScalarTripleProduct(&cart_points_shifted[0], &cart_tetra_points[3], &cart_tetra_points[6], 0)/tetra_stp;
     bary_c[0] = 1-bary_c[1]-bary_c[2]-bary_c[3];
 
     for (int d=0; d<m_imap_dim; d++){
