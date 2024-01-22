@@ -5,14 +5,17 @@ import itertools
 import nestpy
 from scipy.interpolate import interp1d
 
-class Field(cylinterp.Geometry.UniformCylindricalGrid):
-    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring,
-                 file, sag, n_cath_wires, r_max_det):
+lxe_trans_diff = 55*(cylinterp.centimeters**2)/cylinterp.seconds #cm^2/s (EXO-200)
+def lxe_long_diff(E, A=1.531e+01, B=5.361e+01, C=2.621e+01, E0=99.72156937):
+    long_diff = C+A*np.exp(-(E-E0)/B)
+    max_long_diff = C+A
+    return np.clip(long_diff, C, max_long_diff)*(cylinterp.centimeters**2)/cylinterp.seconds
+
+class Interpolator(cylinterp.Geometry.UniformCylindricalGrid):
+    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring):
 
         """
-        Takes in the result of COMSOL according to a grid made by the
-        UniformCylindricalGrid class and provides an interpolation function
-        using barycentric coordinates
+        Provides a template for the interpolator function
 
         :param r0: Lower radius
         :param r1: Upper radius
@@ -21,25 +24,17 @@ class Field(cylinterp.Geometry.UniformCylindricalGrid):
         :param nr: Number of radii values
         :param nz: Number of z slices
         :param n_first_ring: Number of sections of the first ring
-        :param file: The COMSOL file for the field map
-        :param sag:
-        :param n_cath_wires:
-        :param r_max_det:
+        :param interp_values: The value to be interpolated
         """
 
         super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring)
-        self.Emap = pd.read_csv(file, sep=' ', header=None)
-        self.Emap = self.Emap.rename(columns=dict(zip(self.Emap.columns, ['x', 'y', 'z', 'Enorm', 'Ex', 'Ey', 'Ez'])))
-        self.Emap['Enorm'] = 1e3 * self.Emap['Enorm']
-        self.Emap['Ex'] = 1e3 * self.Emap['Ex']
-        self.Emap['Ey'] = 1e3 * self.Emap['Ey']
-        self.Emap['Ez'] = 1e3 * self.Emap['Ez']
-        self.Evec = self.Emap[['Ex', 'Ey', 'Ez']].values
-
-    def Interpolate(self, points):
+        self.interp_values = None
+    
+    def Interpolate(self, points, cart_points = None):
         tetra_indices = self.TetraIndices(points)
-        cart_tetra = Tools.to_cartesian(self.polar_cs_grid[tetra_indices])
-        cart_points = Tools.to_cartesian(points)
+        cart_tetra = self.cart_cs_grid[tetra_indices]
+        if type(cart_points)!=np.ndarray:
+            cart_points = cylinterp.Tools.to_cartesian(points)
 
         A = cart_tetra[:, 0, :]
         B = cart_tetra[:, 1, :]
@@ -50,9 +45,10 @@ class Field(cylinterp.Geometry.UniformCylindricalGrid):
         DA = D - A
         PA = cart_points - A
 
-        c1 = Tools.ScalarTripleProduct(PA, CA, DA) / Tools.ScalarTripleProduct(BA, CA, DA)
-        c2 = Tools.ScalarTripleProduct(PA, BA, DA) / Tools.ScalarTripleProduct(CA, BA, DA)
-        c3 = Tools.ScalarTripleProduct(PA, BA, CA) / Tools.ScalarTripleProduct(DA, BA, CA)
+        stp = cylinterp.Tools.ScalarTripleProduct(BA, CA, DA)
+        c1 = cylinterp.Tools.ScalarTripleProduct(PA, CA, DA) / stp
+        c2 = -cylinterp.Tools.ScalarTripleProduct(PA, BA, DA) / stp
+        c3 = cylinterp.Tools.ScalarTripleProduct(PA, BA, CA) / stp
         c0 = 1 - c1 - c2 - c3
 
         c0 = c0.reshape(len(c0), 1)
@@ -60,10 +56,63 @@ class Field(cylinterp.Geometry.UniformCylindricalGrid):
         c2 = c2.reshape(len(c2), 1)
         c3 = c3.reshape(len(c3), 1)
 
-        return (c0 * self.Evec[tetra_indices[:, 0]] +
-                c1 * self.Evec[tetra_indices[:, 1]] +
-                c2 * self.Evec[tetra_indices[:, 2]] +
-                c3 * self.Evec[tetra_indices[:, 3]])
+        return (c0 * self.interp_values[tetra_indices[:, 0]] +
+                c1 * self.interp_values[tetra_indices[:, 1]] +
+                c2 * self.interp_values[tetra_indices[:, 2]] +
+                c3 * self.interp_values[tetra_indices[:, 3]])
+
+
+class Field(Interpolator):
+    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring, file):
+
+        """
+        Takes in the result of COMSOL according to a grid made by the
+        UniformCylindricalGrid class and provides an interpolation function
+        using barycentric coordinates. The electric field MUST be exported in kV/cm,
+        and is converted to V/cm inside the class
+
+        :param r0: Lower radius
+        :param r1: Upper radius
+        :param z0: Lower z
+        :param z1: Upper z
+        :param nr: Number of radii values
+        :param nz: Number of z slices
+        :param n_first_ring: Number of sections of the first ring
+        :param file: The COMSOL file for the field map
+        """
+
+        super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring)
+        self.Emap = pd.read_csv(file, sep=' ', header=None)
+        self.Emap = self.Emap.rename(columns=dict(zip(self.Emap.columns, ['x', 'y', 'z', 'Enorm', 'Ex', 'Ey', 'Ez'])))
+        self.Emap['Enorm'] = 1e3 * self.Emap['Enorm']
+        self.Emap['Ex'] = 1e3 * self.Emap['Ex']
+        self.Emap['Ey'] = 1e3 * self.Emap['Ey']
+        self.Emap['Ez'] = 1e3 * self.Emap['Ez']
+        self.Evec = self.Emap[['Ex', 'Ey', 'Ez']].values
+        self.interp_values = self.Evec
+
+
+class OpticalSimulation(Interpolator):
+    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring, n_initial_photons, file):
+
+        """
+        Takes in the result of an optical simulation
+
+        :param r0: Lower radius
+        :param r1: Upper radius
+        :param z0: Lower z
+        :param z1: Upper z
+        :param nr: Number of radii values
+        :param nz: Number of z slices
+        :param n_first_ring: Number of sections of the first ring
+        :param file: The COMSOL file for the field map
+        """
+
+        super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring)
+        self.n_initial_photons = n_initial_photons
+        self.hitpatterns = np.load(file)
+        self.interp_values = self.hitpatterns
+
 
 nc = nestpy.NESTcalc(nestpy.VDetector())
 @np.vectorize
@@ -121,6 +170,24 @@ class RTPC(Field):
                               ((zmid - self.z_coords[-1]) * (zmid - self.z_coords[0])))
         return np.array([r * np.cos(self.cath_angles), r * np.sin(self.cath_angles)]).T
 
+    def nearest_cathode_pos(self, z, theta):
+        """
+        Assuming the sagging cathodes are parabolic, find the distance from the center of the detector
+        to the cathode.
+
+        :param z: A 1-d array of z-values
+        :return: A 2-d array of [x,y] values for where the cathodes are located at each particular z
+        """
+        zmid = (self.z_coords[0] + self.z_coords[-1]) / 2
+        r = self.r_max_det - (self.sag * (z - self.z_coords[-1]) * (z - self.z_coords[0]) /
+                            ((zmid - self.z_coords[-1]) * (zmid - self.z_coords[0])))
+        
+        dth = 2*np.pi/self.n_cath_wires
+        th_ind = np.round(theta/dth).astype('int')
+        th_ind[(theta>2*np.pi - dth/2)|(np.isnan(theta))] = 0
+        th_wires = self.cath_angles.flatten()[th_ind]
+        return np.array([r*np.cos(th_wires), r*np.sin(th_wires)]).T
+
     def Drift(self,
               r=None,
               n_pts=100,
@@ -130,7 +197,8 @@ class RTPC(Field):
               cath_thresh=200e-4,
               driftregion=None,
               sampleregion=None,
-              tracking=True, **kwargs):
+              tracking=True,
+              diffusion=False, **kwargs):
 
         """
         Gives the average charge cloud path and drift time
@@ -155,18 +223,19 @@ class RTPC(Field):
         if sampleregion == None:
             sampleregion = driftregion
 
-        if r == None:
+        if type(r) != np.ndarray:
             r = self.generate_rand_points(n_pts, zmin=sampleregion['zmin'],
                                           zmax=sampleregion['zmax'],
                                           rmin=sampleregion['rmin'],
                                           rmax=sampleregion['rmax'])
         points = r
-        points_cartesian = Tools.to_cartesian(points)
+        points_cartesian = cylinterp.Tools.to_cartesian(points)
 
         ids = np.arange(n_pts)
         remaining_ids = ids
         ended = np.repeat(False, n_pts)
         end_time = np.zeros(n_pts)
+        end_pos = np.zeros((n_pts, 3))
         status = np.zeros(n_pts)
 
         #Statuses: 0 = hit anode, 1 = hit cathode, 2 = hit a region of NaN field, 3 = out of drift region
@@ -186,8 +255,9 @@ class RTPC(Field):
             for i in range(recursion_limit):
                 if len(points) == 0:
                     break
-
-                E_interp = self.Interpolate(points)
+                
+                #points is in cylindrical at this point
+                E_interp = self.Interpolate(points, cart_points = points_cartesian)
 
                 #The magnitude of the electric field at each point
                 E_interp_norm = np.linalg.norm(E_interp, axis=1)
@@ -195,20 +265,43 @@ class RTPC(Field):
                 #The drift velocity for each time, dl is in the direction of the field
                 v = self.vd(E_interp_norm)
                 dl = (v * dt * E_interp.T / E_interp_norm).T
+                
+                if diffusion:
+                    #Set up the longitudinal directions
+                    dl_norm = np.linalg.norm(dl, axis = 1)
+                    
+                    #Set up the transverse directions
+                    v_trans_1 = np.array([np.zeros(len(dl)),
+                                          np.ones(len(dl)),
+                                          -dl.T[1]/dl.T[2]]).T
+                    
+                    v_trans_1 = v_trans_1/np.linalg.norm(v_trans_1, axis=1).reshape(len(dl), 1)
+                    v_trans_2 = np.cross(dl/dl_norm.reshape(len(dl), 1), v_trans_1)
+                    
+                    long_step = np.random.normal(dl_norm,
+                                                 np.sqrt(2*lxe_long_diff(E_interp_norm)*dt)).reshape(len(dl), 1)
+                    trans_step_1 = np.random.normal(0, np.sqrt(2*lxe_trans_diff*dt), len(dl)).reshape(len(dl), 1)
+                    trans_step_2 = np.random.normal(0, np.sqrt(2*lxe_trans_diff*dt), len(dl)).reshape(len(dl), 1)
+                    
+                    dl = long_step*dl/dl_norm.reshape(len(dl), 1)+trans_step_1*v_trans_1+trans_step_2*v_trans_2
+                
 
-                points_cartesian = Tools.to_cartesian(points)
+                # points_cartesian = cylinterp.Tools.to_cartesian(points)
                 #Step forward by dl
                 points_cartesian = points_cartesian + q * dl
-                points = Tools.to_polar(points_cartesian)
+                points = cylinterp.Tools.to_polar(points_cartesian)
 
                 # Flag for successful drift to the anode
                 hit_anode = points.T[1] <= driftregion['rmin']
 
                 # Flag for hitting the cathode
-                cath_pos = self.cathode_position(points.T[0])
-                reshapen_cart = np.tile(points_cartesian[:, :2], self.n_cath_wires).reshape(cath_pos.shape)
-                dist_to_cath = np.linalg.norm(reshapen_cart - cath_pos, axis=2)
-                hit_cath = np.any(dist_to_cath < cath_thresh, axis=1)
+                # cath_pos = self.cathode_position(points.T[0])
+                # reshapen_cart = np.tile(points_cartesian[:, :2], self.n_cath_wires).reshape(cath_pos.shape)
+                # dist_to_cath = np.linalg.norm(reshapen_cart - cath_pos, axis=2)
+                cath_pos = self.nearest_cathode_pos(points.T[0], points.T[2])
+                dist_to_cath = np.linalg.norm(cath_pos-points_cartesian[:,:2], axis = 1)
+                # hit_cath = np.any(dist_to_cath < cath_thresh, axis=1)
+                hit_cath = dist_to_cath<cath_thresh
 
                 # Flag for hitting a region of NaN
                 nan_field = np.isnan(E_interp_norm)
@@ -226,8 +319,10 @@ class RTPC(Field):
                 ended = hit_anode | hit_cath | nan_field | oob
 
                 #Only keep the points which haven't ended their tracks
-                points = points[~ended]
                 ended_ids = remaining_ids[ended]
+                end_pos[ended_ids] = points[ended]
+                points = points[~ended]
+                points_cartesian = points_cartesian[~ended]
                 end_time[ended_ids] += (i + 1) * dt
                 #The remaining indices that haven't ended
                 remaining_ids = remaining_ids[~ended]
@@ -236,7 +331,7 @@ class RTPC(Field):
                 r_tracks[i + 1][remaining_ids] = points.T[1]
                 theta_tracks[i + 1][remaining_ids] = points.T[2]
 
-            return end_time, status, z_tracks.T, r_tracks.T, theta_tracks.T, r
+            return end_time, status, z_tracks.T, r_tracks.T, theta_tracks.T, r, end_pos
 
         else:
             for i in range(recursion_limit):
@@ -248,10 +343,29 @@ class RTPC(Field):
                 v = self.vd(E_interp_norm)
                 v[v < 0] = 0
                 dl = (v * dt * E_interp.T / E_interp_norm).T
+                
+                if diffusion:
+                    #Set up the longitudinal directions
+                    dl_norm = np.linalg.norm(dl, axis = 1)
+                    
+                    #Set up the transverse directions
+                    v_trans_1 = np.array([np.zeros(len(dl)),
+                                          np.ones(len(dl)),
+                                          -dl.T[1]/dl.T[2]]).T
+                    
+                    v_trans_1 = v_trans_1/np.linalg.norm(v_trans_1, axis=1).reshape(len(dl), 1)
+                    v_trans_2 = np.cross(dl/dl_norm.reshape(len(dl), 1), v_trans_1)
+                    
+                    long_step = np.random.normal(dl_norm,
+                                                 np.sqrt(2*lxe_long_diff(E_interp_norm)*dt)).reshape(len(dl), 1)
+                    trans_step_1 = np.random.normal(0, np.sqrt(2*lxe_trans_diff*dt), len(dl)).reshape(len(dl), 1)
+                    trans_step_2 = np.random.normal(0, np.sqrt(2*lxe_trans_diff*dt), len(dl)).reshape(len(dl), 1)
+                    
+                    dl = long_step*dl/dl_norm.reshape(len(dl), 1)+trans_step_1*v_trans_1+trans_step_2*v_trans_2
 
-                points_cartesian = Tools.to_cartesian(points)
+                points_cartesian = cylinterp.Tools.to_cartesian(points)
                 points_cartesian = points_cartesian + q * dl
-                points = Tools.to_polar(points_cartesian)
+                points = cylinterp.Tools.to_polar(points_cartesian)
 
 
                 # Flag for successful drift to the anode
@@ -278,8 +392,10 @@ class RTPC(Field):
 
                 ended = hit_anode | hit_cath | nan_field | oob
 
-                points = points[~ended]
                 ended_ids = remaining_ids[ended]
+                end_pos[ended_ids] = points[ended]
+                points = points[~ended]
                 end_time[ended_ids] += (i + 1) * dt
                 remaining_ids = remaining_ids[~ended]
-            return end_time, status, r
+            return end_time, status, r, end_pos
+
