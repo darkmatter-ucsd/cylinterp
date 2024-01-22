@@ -24,11 +24,6 @@ int main()
     std::cout <<"Num threads: "<< omp_get_max_threads()<<"\n";
 
     int n_points = 100;
-    // double fixed_rand_points[3*n_points];
-
-    // GenerateRandPointsPipe(n_points, 0., 2.5, -1, 11, fixed_rand_points, rng);
-
-
     double fixed_rand_points[3*n_points] = {0.91738,1.96182,1.48023,
         4.73132,1.34186,1.42465,
         9.67598,1.71061,3.84124,
@@ -135,16 +130,18 @@ int main()
 
     UniformCylindricalGrid *unicylgrid = new UniformCylindricalGrid(5E-4, 4., -1., 11., 60, 100, 8);
     
-    // int tetra_indices[4*n_points];
-    // for (int i=0; i<n_points; i++){
-    //     unicylgrid->TetraIndices(fixed_rand_points, tetra_indices, i, i);
-    //     // std::cout << "Worked for index "<<i<<"\n";
-    // }
+    int tetra_indices[4*n_points];
+    for (int i=0; i<n_points; i++){
+        unicylgrid->TetraIndices(fixed_rand_points, tetra_indices, i, i);
+        // std::cout << "Worked for index "<<i<<"\n";
+    }
 
-    // std::cout << "Tetrahedral indices for the points: \n";
-    // PrintArr2d(tetra_indices, 4, n_points);
+    std::cout << "Tetrahedral indices for the points: \n";
+    PrintArr2d(tetra_indices, 4, n_points);
     
-    // //Get the field data
+    // Get the field data
+    // NOTE: The field file is kind of big and will exceed github's maximum,
+    // Contact Jianyang (jiq019@ucsd.edu) if you want it!
     std::string fieldfile = "4500V_1mmSag_Run29_Field.bin";
     size_t fieldfile_size = FileSize(fieldfile);
     double* field = new double[fieldfile_size/sizeof(double)];
@@ -156,45 +153,43 @@ int main()
     LoadArrayFile(vd_vd_file, vd_vd);
     LoadArrayFile(vd_E_file, vd_E);
 
-    // std::cout << "\n";
-    // for (int i=0; i<10; i++){
-    //     std::cout << vd_E[i] << " ";
-    // }
-    // std::cout << "\n";
-    // for (int i=0; i<10; i++){
-    //     std::cout << vd_vd[i] << " ";
-    // }
+    std::cout << "\n";
+    for (int i=0; i<10; i++){
+        std::cout << vd_E[i] << " ";
+    }
+    std::cout << "\n";
+    for (int i=0; i<10; i++){
+        std::cout << vd_vd[i] << " ";
+    }
 
     Interpolator *interpol = new Interpolator(5E-4, 4., -1., 11., 60, 100, 8, field, 3);
 
-    // double interp_field[3*n_points];
-    // for (int i=0; i<n_points; i++){
-    //     interpol->Interpolate(fixed_rand_points, cart_points, interp_field, i, i);
-    // }
+    double interp_field[3*n_points];
+    for (int i=0; i<n_points; i++){
+        interpol->Interpolate(fixed_rand_points, cart_points, interp_field, i, i);
+    }
 
-    // std::cout << "\nInterpolated fields: \n";
-    // PrintArr2d(interp_field, 3, n_points);
+    std::cout << "\nInterpolated fields: \n";
+    PrintArr2d(interp_field, 3, n_points);
 
     RTPC *rtpc = new RTPC(interpol, vd_E, vd_vd, 0.1*cm, 20, 2.5*cm);
-    // std::cout << "\nInterpolated v_drift: \n[";
-    // for (int i=0; i<n_points; i++){
-    //     double E_norm = std::sqrt(interp_field[3*i]*interp_field[3*i]+
-    //         interp_field[3*i+1]*interp_field[3*i+1]+
-    //         interp_field[3*i+2]*interp_field[3*i+2]);
-    //     std::cout << rtpc->VdInterp(E_norm);
-    //     if (i!=n_points-2) std::cout <<", ";
-    // }
-    // std::cout << "]\n";
+    std::cout << "\nInterpolated v_drift: \n[";
+    for (int i=0; i<n_points; i++){
+        double E_norm = std::sqrt(interp_field[3*i]*interp_field[3*i]+
+            interp_field[3*i+1]*interp_field[3*i+1]+
+            interp_field[3*i+2]*interp_field[3*i+2]);
+        std::cout << rtpc->VdInterp(E_norm);
+        if (i!=n_points-2) std::cout <<", ";
+    }
+    std::cout << "]\n";
 
-    // std::cout << "\nNearest cathode distances: \n[";
-    // for (int i=0; i<n_points; i++){
-    //     std::cout << rtpc->NearestCathodeDistance(fixed_rand_points, cart_points, i);
-    //     if (i!=n_points-2) std::cout <<", ";
-    // }
-    // std::cout << "]\n";
+    std::cout << "\nNearest cathode distances: \n[";
+    for (int i=0; i<n_points; i++){
+        std::cout << rtpc->NearestCathodeDistance(fixed_rand_points, cart_points, i);
+        if (i!=n_points-2) std::cout <<", ";
+    }
+    std::cout << "]\n";
 
-    // double tracks = {0.};
-    // double tracks[3] = {0.};
     int tracksize = 3*n_points*rtpc->m_irecursion_limit;
     double *tracks = new double[tracksize];
     std::fill(tracks, tracks + tracksize, 0.);

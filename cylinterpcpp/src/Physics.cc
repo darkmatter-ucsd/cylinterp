@@ -84,7 +84,7 @@ void RTPC::Drift(double r[], int n_pts,
     double *E_interp = new double[3*n_pts];
 
     int p;
-    #pragma omp parallel for private(p) shared(r, end_time, end_pos, status, tracks, cart_r, E_interp) num_threads(6) collapse(1)
+    #pragma omp parallel for private(p) shared(r, end_time, end_pos, status, tracks, cart_r, E_interp) num_threads(m_inum_threads) collapse(1)
     for (p=0; p<n_pts; p++){
         for (int c=0; c<m_irecursion_limit; c++){
             if (tracking){
@@ -95,6 +95,7 @@ void RTPC::Drift(double r[], int n_pts,
 
             //This is a 2-in-1 step, calculate the electric field...
             //and the cartesian point
+            // m_field->Interpolate(r, cart_r, E_interp, p, p);
             m_field->Interpolate(r, cart_r, E_interp, p, p);
             double E_interp_norm = std::sqrt(E_interp[3*p]*E_interp[3*p]+
                 E_interp[3*p+1]*E_interp[3*p+1]+

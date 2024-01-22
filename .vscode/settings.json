@@ -41,6 +41,14 @@
         "bit": "cpp",
         "fstream": "cpp",
         "deque": "cpp",
-        "optional": "cpp"
+        "optional": "cpp",
+        "chrono": "cpp",
+        "cinttypes": "cpp",
+        "cstring": "cpp",
+        "ctime": "cpp",
+        "numeric": "cpp",
+        "ratio": "cpp",
+        "iomanip": "cpp",
+        "sstream": "cpp"
     }
 }

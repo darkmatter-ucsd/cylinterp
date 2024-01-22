@@ -8,6 +8,7 @@
 #include <random>
 #include <vector>
 #include "pcg_random.hh"
+#include <omp.h>
 
 template<typename T>
 static void PrintArr2d(T tArray[], int iNx, int iNy){
@@ -120,12 +121,14 @@ static double ScalarTripleProduct(double a[], double b[], double c[], int i){
 static void GenerateRandPointsPipe(int n_points,
     double r_min, double r_max,
     double z_min, double z_max,
+    double th_min, double th_max,
     double points[], pcg32& rng){
     
     std::uniform_real_distribution<double> uni_dist_z(z_min, z_max);
     std::uniform_real_distribution<double> uni_dist_r(r_min*r_min, r_max*r_max);
-    std::uniform_real_distribution<double> uni_dist_theta(0., 2* M_PI);
+    std::uniform_real_distribution<double> uni_dist_theta(th_min, th_max);
 
+    #pragma omp parallel for num_threads(4)
     for (int i=0; i < n_points; i++){
         points[3*i] = uni_dist_z(rng);
         points[3*i+1] = std::sqrt(uni_dist_r(rng));
