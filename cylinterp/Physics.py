@@ -2,7 +2,7 @@ import cylinterp
 import numpy as np
 import pandas as pd
 import itertools
-import nestpy
+import os
 from scipy.interpolate import interp1d
 
 lxe_trans_diff = 55*(cylinterp.centimeters**2)/cylinterp.seconds #cm^2/s (EXO-200)
@@ -114,16 +114,26 @@ class OpticalSimulation(Interpolator):
         self.interp_values = self.hitpatterns
 
 
-nc = nestpy.NESTcalc(nestpy.VDetector())
-@np.vectorize
-def nest_vd(field, temp=177.15 , density = 2.94):
-    dv = nc.SetDriftVelocity(temp, # K temp
-                            density,
-                            field)
-    return dv*(1e-1) #cm/us
+# nc = nestpy.NESTcalc(nestpy.VDetector())
+# @np.vectorize
+# def nest_vd(field, temp=177.15 , density = 2.94):
+#     dv = nc.SetDriftVelocity(temp, # K temp
+#                             density,
+#                             field)
+#     return dv*(1e-1) #cm/us
 
-egridvd = np.linspace(0,1e6,int(1e6))
-vd_interp = interp1d(egridvd, nest_vd(egridvd))
+# egridvd = np.linspace(0,1e6,int(1e6))
+vd_E_grid_path = os.path.join(
+    os.path.dirname(__file__),
+    'data_files/vd_E_grid.npy')
+vd_vd_grid_path = os.path.join(
+    os.path.dirname(__file__),
+    'data_files/vd_vd_grid.npy')
+
+egridvd = np.load(vd_E_grid_path)
+vdgrid = np.load(vd_vd_grid_path)
+vd_interp = interp1d(egridvd, vdgrid)
+# vd_interp = interp1d(egridvd, nest_vd(egridvd))
 
 class RTPC(Field):
 
@@ -155,7 +165,6 @@ class RTPC(Field):
         self.cath_angles = self.cath_angles.reshape((n_cath_wires, 1))
         self.r_max_det = r_max_det
         self.vd = vd
-
 
     def cathode_position(self, z):
         """
@@ -252,150 +261,88 @@ class RTPC(Field):
             r_tracks[0] = r.T[1]
             theta_tracks[0] = r.T[2]
 
-            for i in range(recursion_limit):
-                if len(points) == 0:
-                    break
+        for i in range(recursion_limit):
+            if len(points) == 0:
+                break
+            
+            #points is in cylindrical at this point
+            E_interp = self.Interpolate(points, cart_points = points_cartesian)
+
+            #The magnitude of the electric field at each point
+            E_interp_norm = np.linalg.norm(E_interp, axis=1)
+
+            #The drift velocity for each time, dl is in the direction of the field
+            v = self.vd(E_interp_norm)
+            dl = (v * dt * E_interp.T / E_interp_norm).T
+            
+            if diffusion:
+                #Set up the longitudinal directions
+                dl_norm = np.linalg.norm(dl, axis = 1)
                 
-                #points is in cylindrical at this point
-                E_interp = self.Interpolate(points, cart_points = points_cartesian)
-
-                #The magnitude of the electric field at each point
-                E_interp_norm = np.linalg.norm(E_interp, axis=1)
-
-                #The drift velocity for each time, dl is in the direction of the field
-                v = self.vd(E_interp_norm)
-                dl = (v * dt * E_interp.T / E_interp_norm).T
+                #Set up the transverse directions
+                v_trans_1 = np.array([np.zeros(len(dl)),
+                                        np.ones(len(dl)),
+                                        -dl.T[1]/dl.T[2]]).T
                 
-                if diffusion:
-                    #Set up the longitudinal directions
-                    dl_norm = np.linalg.norm(dl, axis = 1)
-                    
-                    #Set up the transverse directions
-                    v_trans_1 = np.array([np.zeros(len(dl)),
-                                          np.ones(len(dl)),
-                                          -dl.T[1]/dl.T[2]]).T
-                    
-                    v_trans_1 = v_trans_1/np.linalg.norm(v_trans_1, axis=1).reshape(len(dl), 1)
-                    v_trans_2 = np.cross(dl/dl_norm.reshape(len(dl), 1), v_trans_1)
-                    
-                    long_step = np.random.normal(dl_norm,
-                                                 np.sqrt(2*lxe_long_diff(E_interp_norm)*dt)).reshape(len(dl), 1)
-                    trans_step_1 = np.random.normal(0, np.sqrt(2*lxe_trans_diff*dt), len(dl)).reshape(len(dl), 1)
-                    trans_step_2 = np.random.normal(0, np.sqrt(2*lxe_trans_diff*dt), len(dl)).reshape(len(dl), 1)
-                    
-                    dl = long_step*dl/dl_norm.reshape(len(dl), 1)+trans_step_1*v_trans_1+trans_step_2*v_trans_2
+                v_trans_1 = v_trans_1/np.linalg.norm(v_trans_1, axis=1).reshape(len(dl), 1)
+                v_trans_2 = np.cross(dl/dl_norm.reshape(len(dl), 1), v_trans_1)
                 
+                long_step = np.random.normal(dl_norm,
+                                                np.sqrt(2*lxe_long_diff(E_interp_norm)*dt)).reshape(len(dl), 1)
+                trans_step_1 = np.random.normal(0, np.sqrt(2*lxe_trans_diff*dt), len(dl)).reshape(len(dl), 1)
+                trans_step_2 = np.random.normal(0, np.sqrt(2*lxe_trans_diff*dt), len(dl)).reshape(len(dl), 1)
+                
+                dl = long_step*dl/dl_norm.reshape(len(dl), 1)+trans_step_1*v_trans_1+trans_step_2*v_trans_2
+            
 
-                # points_cartesian = cylinterp.Tools.to_cartesian(points)
-                #Step forward by dl
-                points_cartesian = points_cartesian + q * dl
-                points = cylinterp.Tools.to_polar(points_cartesian)
+            # points_cartesian = cylinterp.Tools.to_cartesian(points)
+            #Step forward by dl
+            points_cartesian = points_cartesian + q * dl
+            points = cylinterp.Tools.to_polar(points_cartesian)
 
-                # Flag for successful drift to the anode
-                hit_anode = points.T[1] <= driftregion['rmin']
+            # Flag for successful drift to the anode
+            hit_anode = points.T[1] <= driftregion['rmin']
 
-                # Flag for hitting the cathode
-                # cath_pos = self.cathode_position(points.T[0])
-                # reshapen_cart = np.tile(points_cartesian[:, :2], self.n_cath_wires).reshape(cath_pos.shape)
-                # dist_to_cath = np.linalg.norm(reshapen_cart - cath_pos, axis=2)
-                cath_pos = self.nearest_cathode_pos(points.T[0], points.T[2])
-                dist_to_cath = np.linalg.norm(cath_pos-points_cartesian[:,:2], axis = 1)
-                # hit_cath = np.any(dist_to_cath < cath_thresh, axis=1)
-                hit_cath = dist_to_cath<cath_thresh
+            # Flag for hitting the cathode
+            # cath_pos = self.cathode_position(points.T[0])
+            # reshapen_cart = np.tile(points_cartesian[:, :2], self.n_cath_wires).reshape(cath_pos.shape)
+            # dist_to_cath = np.linalg.norm(reshapen_cart - cath_pos, axis=2)
+            cath_pos = self.nearest_cathode_pos(points.T[0], points.T[2])
+            dist_to_cath = np.linalg.norm(cath_pos-points_cartesian[:,:2], axis = 1)
+            # hit_cath = np.any(dist_to_cath < cath_thresh, axis=1)
+            hit_cath = dist_to_cath<cath_thresh
 
-                # Flag for hitting a region of NaN
-                nan_field = np.isnan(E_interp_norm)
+            # Flag for hitting a region of NaN
+            nan_field = np.isnan(E_interp_norm)
 
-                # Flag for out of bounds
-                oob = ((points.T[1] > driftregion['rmax']) |
-                       (points.T[0] > driftregion['zmax']) |
-                       (points.T[0] < driftregion['zmin']))
+            # Flag for out of bounds
+            oob = ((points.T[1] > driftregion['rmax']) |
+                    (points.T[0] > driftregion['zmax']) |
+                    (points.T[0] < driftregion['zmin']))
 
-                status[remaining_ids[hit_anode]] = 0
-                status[remaining_ids[hit_cath]] = 1
-                status[remaining_ids[nan_field]] = 2
-                status[remaining_ids[oob]] = 3
+            status[remaining_ids[hit_anode]] = 0
+            status[remaining_ids[hit_cath]] = 1
+            status[remaining_ids[nan_field]] = 2
+            status[remaining_ids[oob]] = 3
 
-                ended = hit_anode | hit_cath | nan_field | oob
+            ended = hit_anode | hit_cath | nan_field | oob
 
-                #Only keep the points which haven't ended their tracks
-                ended_ids = remaining_ids[ended]
-                end_pos[ended_ids] = points[ended]
-                points = points[~ended]
-                points_cartesian = points_cartesian[~ended]
-                end_time[ended_ids] += (i + 1) * dt
-                #The remaining indices that haven't ended
-                remaining_ids = remaining_ids[~ended]
+            #Only keep the points which haven't ended their tracks
+            ended_ids = remaining_ids[ended]
+            end_pos[ended_ids] = points[ended]
+            points = points[~ended]
+            points_cartesian = points_cartesian[~ended]
+            end_time[ended_ids] += (i + 1) * dt
+            #The remaining indices that haven't ended
+            remaining_ids = remaining_ids[~ended]
 
+            if tracking:
                 z_tracks[i + 1][remaining_ids] = points.T[0]
                 r_tracks[i + 1][remaining_ids] = points.T[1]
                 theta_tracks[i + 1][remaining_ids] = points.T[2]
 
+        if tracking:
             return end_time, status, z_tracks.T, r_tracks.T, theta_tracks.T, r, end_pos
-
         else:
-            for i in range(recursion_limit):
-                if len(points) == 0:
-                    break
-                E_interp = self.Interpolate(points)
-                E_interp_norm = np.linalg.norm(E_interp, axis=1)
-
-                v = self.vd(E_interp_norm)
-                v[v < 0] = 0
-                dl = (v * dt * E_interp.T / E_interp_norm).T
-                
-                if diffusion:
-                    #Set up the longitudinal directions
-                    dl_norm = np.linalg.norm(dl, axis = 1)
-                    
-                    #Set up the transverse directions
-                    v_trans_1 = np.array([np.zeros(len(dl)),
-                                          np.ones(len(dl)),
-                                          -dl.T[1]/dl.T[2]]).T
-                    
-                    v_trans_1 = v_trans_1/np.linalg.norm(v_trans_1, axis=1).reshape(len(dl), 1)
-                    v_trans_2 = np.cross(dl/dl_norm.reshape(len(dl), 1), v_trans_1)
-                    
-                    long_step = np.random.normal(dl_norm,
-                                                 np.sqrt(2*lxe_long_diff(E_interp_norm)*dt)).reshape(len(dl), 1)
-                    trans_step_1 = np.random.normal(0, np.sqrt(2*lxe_trans_diff*dt), len(dl)).reshape(len(dl), 1)
-                    trans_step_2 = np.random.normal(0, np.sqrt(2*lxe_trans_diff*dt), len(dl)).reshape(len(dl), 1)
-                    
-                    dl = long_step*dl/dl_norm.reshape(len(dl), 1)+trans_step_1*v_trans_1+trans_step_2*v_trans_2
-
-                points_cartesian = cylinterp.Tools.to_cartesian(points)
-                points_cartesian = points_cartesian + q * dl
-                points = cylinterp.Tools.to_polar(points_cartesian)
-
-
-                # Flag for successful drift to the anode
-                hit_anode = points.T[1] <= driftregion['rmin']
-
-                # Flag for hitting the cathode
-                cath_pos = self.cathode_position(points.T[0])
-                reshapen_cart = np.tile(points_cartesian[:, :2], self.n_cath_wires).reshape(cath_pos.shape)
-                dist_to_cath = np.linalg.norm(reshapen_cart - cath_pos, axis=2)
-                hit_cath = np.any(dist_to_cath < cath_thresh, axis=1)
-
-                # Flag for hitting a region of NaN
-                nan_field = np.isnan(E_interp_norm)
-
-                # Flag for out of bounds
-                oob = ((points.T[1] > driftregion['rmax']) |
-                       (points.T[0] > driftregion['zmax']) |
-                       (points.T[0] < driftregion['zmin']))
-
-                status[remaining_ids[hit_anode]] = 0
-                status[remaining_ids[hit_cath]] = 1
-                status[remaining_ids[nan_field]] = 2
-                status[remaining_ids[oob]] = 3
-
-                ended = hit_anode | hit_cath | nan_field | oob
-
-                ended_ids = remaining_ids[ended]
-                end_pos[ended_ids] = points[ended]
-                points = points[~ended]
-                end_time[ended_ids] += (i + 1) * dt
-                remaining_ids = remaining_ids[~ended]
             return end_time, status, r, end_pos
 
