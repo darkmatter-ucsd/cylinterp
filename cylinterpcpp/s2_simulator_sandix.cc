@@ -40,7 +40,9 @@ int main(int argc, char* argv[])
     double theta_max_gen = 2*M_PI/8;
     int chunk_size = 1000; //Number of electrons to produce in a batch
 
-    while ((c = getopt(argc, argv, "t:E:v:V:o:n:e:r:R:z:Z:u:U:M:")) != -1)
+    double transverse_diffusion_coefficient = 55*cm*cm/s;
+
+    while ((c = getopt(argc, argv, "t:E:v:V:o:n:e:r:R:z:Z:u:U:M:D:")) != -1)
 	{
 		switch (c)
 		{
@@ -100,6 +102,10 @@ int main(int argc, char* argv[])
             chunk_size = atoi(optarg);
             break;
 
+        case 'D':
+            transverse_diffusion_coefficient = atof(optarg)*cm*cm/s;
+            break;
+
 		default:
 			break;
 		}
@@ -127,6 +133,7 @@ int main(int argc, char* argv[])
     Interpolator *E_field = new Interpolator(5E-4, 4., -1., 11., 60, 100, 8, field, 3);
     RTPC *rtpc = new RTPC(E_field, vd_E, vd_vd, 0.1*cm, 20, 2.5*cm);
     rtpc->m_inum_threads = n_threads;
+    rtpc->m_dlxe_trans_diff = transverse_diffusion_coefficient;
 
     int n_chunks = n_points/chunk_size;
     for (int c=0; c<n_chunks; c++){

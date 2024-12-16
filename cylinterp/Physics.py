@@ -4,6 +4,7 @@ import pandas as pd
 import itertools
 import os
 from scipy.interpolate import interp1d
+from scipy.spatial import KDTree
 
 lxe_trans_diff = 55*(cylinterp.centimeters**2)/cylinterp.seconds #cm^2/s (EXO-200)
 def lxe_long_diff(E, A=1.531e+01, B=5.361e+01, C=2.621e+01, E0=99.72156937):
@@ -12,7 +13,7 @@ def lxe_long_diff(E, A=1.531e+01, B=5.361e+01, C=2.621e+01, E0=99.72156937):
     return np.clip(long_diff, C, max_long_diff)*(cylinterp.centimeters**2)/cylinterp.seconds
 
 class Interpolator(cylinterp.Geometry.UniformCylindricalGrid):
-    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring):
+    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring, arb_grid=None, **kwargs):
 
         """
         Provides a template for the interpolator function
@@ -29,8 +30,21 @@ class Interpolator(cylinterp.Geometry.UniformCylindricalGrid):
 
         super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring)
         self.interp_values = None
+        self.n_dim = 1
+
+        if type(arb_grid)!=type(None):
+            #Even though Interpolator inherits from a UniformCylindricalGrid, we still allow
+            #the option to have an aribtrary grid. However, in doing so, we use a KD Tree instead
+            if type(arb_grid)!=np.ndarray:
+                raise ValueError("ERROR: Arbitrary grid must be an ndarray of shape (n_points, n_dim)")
+            self.grid_kdtree = KDTree(arb_grid)
+            self.Interpolate = self.InterpolateArbitraryGrid
+        else:
+            self.Interpolate = self.InterpolateCylGrid
+
+
     
-    def Interpolate(self, points, cart_points = None):
+    def InterpolateCylGrid(self, points, cart_points = None):
         tetra_indices = self.TetraIndices(points)
         cart_tetra = self.cart_cs_grid[tetra_indices]
         if type(cart_points)!=np.ndarray:
@@ -60,10 +74,34 @@ class Interpolator(cylinterp.Geometry.UniformCylindricalGrid):
                 c1 * self.interp_values[tetra_indices[:, 1]] +
                 c2 * self.interp_values[tetra_indices[:, 2]] +
                 c3 * self.interp_values[tetra_indices[:, 3]])
+    
+    def InterpolateArbitraryGrid(self, points,
+                                 cart_points=None,
+                                 k_n=4):
+        """
+        Interpolate points on an arbitrary grid using weighted inverse distance.
+        Technically the argument of "points" isn't used, but we require the same
+        format as above. Is it stupid? Yes. But I can't be bothered right now to
+        figure out how to change it.
+        """
+        if type(cart_points)!=np.ndarray:
+            raise ValueError("Argument 'cart_points' must be specified and must be a numpy.ndarray.")
+
+        n_pts = len(cart_points)
+        nearest_dist, nearest_ind = self.grid_kdtree.query(cart_points, k=k_n)
+        vec_nearest_dist = nearest_dist.repeat(self.n_dim).reshape(n_pts,k_n,self.n_dim)
+        weighted_sum = np.sum(self.interp_values[nearest_ind]*(1/vec_nearest_dist), axis=1)
+        sum_nearest_neighbors = np.sum(1/nearest_dist, axis=1).repeat(self.n_dim).reshape(n_pts,self.n_dim)
+        interp_vec = weighted_sum/sum_nearest_neighbors
+
+        return interp_vec
+
+
 
 
 class Field(Interpolator):
-    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring, file):
+    def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring, file,
+                  arb_grid=None):
 
         """
         Takes in the result of COMSOL according to a grid made by the
@@ -81,7 +119,7 @@ class Field(Interpolator):
         :param file: The COMSOL file for the field map
         """
 
-        super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring)
+        super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring, arb_grid)
         self.Emap = pd.read_csv(file, sep=' ', header=None)
         self.Emap = self.Emap.rename(columns=dict(zip(self.Emap.columns, ['x', 'y', 'z', 'Enorm', 'Ex', 'Ey', 'Ez'])))
         self.Emap['Enorm'] = 1e3 * self.Emap['Enorm']
@@ -89,7 +127,10 @@ class Field(Interpolator):
         self.Emap['Ey'] = 1e3 * self.Emap['Ey']
         self.Emap['Ez'] = 1e3 * self.Emap['Ez']
         self.Evec = self.Emap[['Ex', 'Ey', 'Ez']].values
+        
+        #Set the default values
         self.interp_values = self.Evec
+        self.n_dim = 3
 
 
 class OpticalSimulation(Interpolator):
@@ -140,7 +181,8 @@ class RTPC(Field):
     def __init__(self, r0, r1, z0, z1, nr, nz, n_first_ring,
                  file, n_cath_wires, r_max_det,
                  sag = 0,
-                 vd = vd_interp):
+                 vd = vd_interp,
+                 arb_grid=None):
 
         """
         A type of field described by a geometry of cathode wires on the outer edge oriented along z
@@ -155,16 +197,20 @@ class RTPC(Field):
         :param file: The COMSOL file for the field map
         :param n_cath_wires: Number of cathode wires
         :param r_max_det: Maximum radius of the detector
+
+        Optional arguments:
         :param sag: Sag of the cathodes in the middle of the detector
         :param vd: Drift velocity in cm/us
+        :arb_grid: If using an arbitrary grid, it doesn't matter what you put for nr, nz, and n_first_ring
         """
-        super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring, file)
+        super().__init__(r0, r1, z0, z1, nr, nz, n_first_ring, file, arb_grid=arb_grid)
         self.sag = sag
         self.n_cath_wires = n_cath_wires
         self.cath_angles = 2 * np.pi * np.arange(n_cath_wires) / n_cath_wires
         self.cath_angles = self.cath_angles.reshape((n_cath_wires, 1))
         self.r_max_det = r_max_det
         self.vd = vd
+
 
     def cathode_position(self, z):
         """
@@ -207,7 +253,9 @@ class RTPC(Field):
               driftregion=None,
               sampleregion=None,
               tracking=True,
-              diffusion=False, **kwargs):
+              diffusion=False,
+              anodeflag=True,
+              cathodeflag=True, **kwargs):
 
         """
         Gives the average charge cloud path and drift time
@@ -301,16 +349,22 @@ class RTPC(Field):
             points = cylinterp.Tools.to_polar(points_cartesian)
 
             # Flag for successful drift to the anode
-            hit_anode = points.T[1] <= driftregion['rmin']
-
+            if anodeflag:
+                hit_anode = points.T[1] <= driftregion['rmin']
+            else:
+                hit_anode = np.zeros(len(points), dtype=bool)
+            
             # Flag for hitting the cathode
             # cath_pos = self.cathode_position(points.T[0])
             # reshapen_cart = np.tile(points_cartesian[:, :2], self.n_cath_wires).reshape(cath_pos.shape)
             # dist_to_cath = np.linalg.norm(reshapen_cart - cath_pos, axis=2)
-            cath_pos = self.nearest_cathode_pos(points.T[0], points.T[2])
-            dist_to_cath = np.linalg.norm(cath_pos-points_cartesian[:,:2], axis = 1)
-            # hit_cath = np.any(dist_to_cath < cath_thresh, axis=1)
-            hit_cath = dist_to_cath<cath_thresh
+            if cathodeflag:
+                cath_pos = self.nearest_cathode_pos(points.T[0], points.T[2])
+                dist_to_cath = np.linalg.norm(cath_pos-points_cartesian[:,:2], axis = 1)
+                # hit_cath = np.any(dist_to_cath < cath_thresh, axis=1)
+                hit_cath = dist_to_cath<cath_thresh
+            else:
+                hit_cath = np.zeros(len(points), dtype=bool)
 
             # Flag for hitting a region of NaN
             nan_field = np.isnan(E_interp_norm)

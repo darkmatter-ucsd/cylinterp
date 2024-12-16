@@ -28,7 +28,7 @@ class RTPC {
             bool tracking, bool diffusion, pcg32& rng,
             double end_time[], double end_pos[], int status[],
             double tracks[]);
-
+        
         /*
         Key differences from the python:
         - Do the sampling of the points r in main
